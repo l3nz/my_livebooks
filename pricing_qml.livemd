@@ -1,0 +1,178 @@
+# QML Pricing
+
+```elixir
+Mix.install([
+  {:vega_lite, "~> 0.1.4"},
+  {:kino_vega_lite, "~> 0.1.1"}
+])
+
+alias VegaLite, as: Vl
+```
+
+## Model
+
+Il modello si aspetta una pricelist, del tipo:
+
+```
+  prices = [
+    %{upto: 10, price: 3.0},
+    %{upto: 50, price: 2.5},
+    %{upto: 100, price: 2.0}
+  ]
+```
+
+Da cui calcola un Pricemodel, del tipo:
+
+```
+[
+  %{from: 0,  upto: 10, max_amt: 30.0, offset: 0, price: 3.0},
+  %{from: 10, upto: 50, max_amt: 100.0, offset: 30.0, price: 2.5},
+  %{from: 50, upto: 100,  max_amt: 100.0, offset: 130.0, price: 2.0}
+]
+```
+
+Che poi viene usato nel calcolo.
+
+```elixir
+prices = [
+  %{upto: 10, price: 3.0},
+  %{upto: 50, price: 2.5},
+  %{upto: 100, price: 2.0}
+]
+
+defmodule Pricelist do
+  def pricemodel(pricelist) do
+    sorted_list =
+      pricelist
+      |> Enum.sort_by(fn %{upto: u} -> u end)
+
+    scaglioni =
+      Enum.zip([%{upto: 0, price: 0} | sorted_list], sorted_list)
+      |> Enum.map(fn {%{upto: from}, %{upto: to, price: p}} ->
+        %{from: from, upto: to, price: p, offset: 0, max_amt: (to - from) * p}
+      end)
+      |> Enum.sort_by(fn %{upto: u} -> u end)
+
+    scaglioni
+    |> Enum.map(fn %{from: from, upto: _to} = scaglione ->
+      somma_precedenti =
+        scaglioni
+        |> Enum.filter(fn %{from: v_from} -> from > v_from end)
+        |> Enum.reduce(0, fn %{max_amt: max_amt}, acc -> acc + max_amt end)
+
+      %{scaglione | offset: somma_precedenti}
+    end)
+  end
+
+  def price(0, _), do: 0
+
+  def price(n_agents, pricemodel) do
+    pricemodel
+    |> Enum.filter(fn %{from: from, upto: to, price: _p, offset: _o} ->
+      n_agents > from && n_agents <= to
+    end)
+    |> Enum.map(fn %{from: from, upto: _to, price: p, offset: o} -> o + p * (n_agents - from) end)
+    |> List.first()
+  end
+
+  def price_info_at(agentcount, pricemodel) do
+    p = price(agentcount, pricemodel)
+    avg = p / agentcount
+    %{n_agents: agentcount, price: p, avg_price: avg}
+  end
+
+  @doc """
+  Una lista di valori da 5 a n_agents per le simulazioni.
+  """
+  def items(n_agents, pricemodel) do
+    for n <- 5..n_agents do
+      price_info_at(n, pricemodel)
+    end
+  end
+
+  def graph(n_agents, pricemodel) do
+    data = items(n_agents, pricemodel)
+
+    Vl.new(width: 400, height: 300)
+    |> Vl.data_from_values(data)
+    |> Vl.concat(
+      [
+        Vl.new()
+        |> Vl.mark(:line)
+        |> Vl.encode_field(:x, "n_agents", type: :quantitative)
+        |> Vl.encode_field(:y, "price", type: :quantitative),
+        Vl.new()
+        |> Vl.mark(:line)
+        |> Vl.encode_field(:x, "n_agents", type: :quantitative)
+        |> Vl.encode_field(:y, "avg_price", type: :quantitative)
+      ],
+      :vertical
+    )
+  end
+
+  def defined_points_table(pricemodel) do
+    data =
+      [10, 20, 50]
+      |> Enum.map(fn n -> price_info_at(n, pricemodel) end)
+
+    Kino.DataTable.new(data,
+      name: "Price evaluation",
+      keys: [:n_agents, :price, :avg_price]
+    )
+  end
+
+  def render(pricelist) do
+    pm = pricemodel(pricelist)
+    Pricelist.graph(1000, pm) |> Kino.render()
+    Pricelist.defined_points_table(pm) |> Kino.render()
+    0
+  end
+
+  def log(v, lbl) do
+    IO.puts("#{lbl}: #{inspect(v)}")
+    v
+  end
+end
+
+# Pricelist.items(100, prices)
+
+# Pricelist.graph(100, prices)
+
+Pricelist.pricemodel(prices)
+
+# Pricelist.price(60, Pricelist.pricemodel(prices))
+
+# nil
+```
+
+## Prezzi
+
+MOdello uno
+
+```elixir
+Pricelist.render([
+  %{upto: 10, price: 3},
+  %{upto: 50, price: 2.5},
+  %{upto: 200, price: 2},
+  %{upto: 9999, price: 1}
+])
+```
+
+Modello due
+
+```elixir
+Pricelist.render([
+  %{upto: 10, price: 3},
+  %{upto: 50, price: 2.5},
+  %{upto: 200, price: 2},
+  %{upto: 9999, price: 1}
+])
+```
+
+```elixir
+
+```
+
+```elixir
+
+```
