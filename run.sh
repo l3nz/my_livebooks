@@ -1,3 +1,3 @@
 #! /bin/bash
 
-LIVEBOOK_HOME=. ~/.mix/escripts/livebook server
+LIVEBOOK_HOME=. livebook server --port 9090
