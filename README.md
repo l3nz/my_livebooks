@@ -3,6 +3,8 @@
 
 To start a livebook server with the current dir, just type `./run.sh`	
 
+To install a sepcific version, use `mix escript.install hex livebook 0.10.0` and then `asdf reshim`
+
 ## Monty Hall Problem
 
 
