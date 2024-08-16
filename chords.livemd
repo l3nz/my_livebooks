@@ -1,0 +1,45 @@
+# Chords
+
+## Theory
+
+```elixir
+
+
+defmodule Mus do
+
+  def notes(), do: [:c, :cs, :d, :ds, :e, :f, :fs, :g, :gs, :a, :as, :b]
+ def scales(), do:  %{maj: [0, 2, 4, 5, 7, 9, 11]}
+
+  @doc """
+    Data una nota, calcola la nota a distranza di tanti semitoni.
+  """
+  def add_semis(note, semis) do 
+    notepos = Enum.find_index(notes(), fn v -> v == note end)
+    newnotepos = rem(notepos + semis, 12)
+    Enum.at(notes(), newnotepos)
+  end
+
+  def scale(note, type) do
+    scaleform = Map.get(scales(), type)
+    for s <- scaleform , do: add_semis(note, s)
+  end
+
+  def chord(note, type, positions) do
+    scale(note, type)
+    |> Enum.with_index()
+    |> Enum.filter(fn {_n, i} -> (i+1) in positions end)
+    |> Enum.map( fn {n, _i} -> n end)
+  end
+  
+end
+
+Mus.chord(:c, :maj, [1, 3, 5])
+
+
+```
+
+```elixir
+cmaj = Mus.scale(:c, :maj)
+
+
+```
