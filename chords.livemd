@@ -2,44 +2,224 @@
 
 ## Theory
 
+Scala diminuita: https://www.saxonline.it/teoria/la-scala-diminuita/
+
 ```elixir
-
-
 defmodule Mus do
-
   def notes(), do: [:c, :cs, :d, :ds, :e, :f, :fs, :g, :gs, :a, :as, :b]
- def scales(), do:  %{maj: [0, 2, 4, 5, 7, 9, 11]}
+  def scales(), do: %{maj: [2, 2, 1, 2, 2, 2], 
+    min: [2, 1, 2, 2, 1, 2],
+    dim: [2, 1, 2, 1, 2, 1, 2]
+  
+  }
+
+  def known_scales(), do: Map.keys(scales())
 
   @doc """
     Data una nota, calcola la nota a distranza di tanti semitoni.
   """
-  def add_semis(note, semis) do 
+  def add_semis(note, semis) do
     notepos = Enum.find_index(notes(), fn v -> v == note end)
     newnotepos = rem(notepos + semis, 12)
     Enum.at(notes(), newnotepos)
   end
 
   def scale(note, type) do
-    scaleform = Map.get(scales(), type)
-    for s <- scaleform , do: add_semis(note, s)
+    scale_ints = Map.get(scales(), type)
+
+    scaleform =
+      Enum.reduce(scale_ints, [0], fn i, acc ->
+        v = List.first(acc, 0) + i
+        [v | acc]
+      end)
+      |> Enum.reverse()
+
+    for s <- scaleform, do: add_semis(note, s)
   end
+
+  def chord35(note, type), do: chord(note, type, [1, 3, 5])
+  def chord35(scale), do: chord(scale, [1, 3, 5])
 
   def chord(note, type, positions) do
     scale(note, type)
-    |> Enum.with_index()
-    |> Enum.filter(fn {_n, i} -> (i+1) in positions end)
-    |> Enum.map( fn {n, _i} -> n end)
+    |> chord(positions)
   end
-  
+
+  def chord(scale, positions) do
+    scale
+    |> Enum.with_index()
+    |> Enum.filter(fn {_n, i} -> (i + 1) in positions end)
+    |> Enum.map(fn {n, _i} -> n end)
+  end
+
+  def matching(scale, chord) do
+    chord
+    |> Enum.filter(fn c -> c in scale end)
+  end
+
+  def matches?(scale, chord), do: chord == matching(scale, chord)
 end
 
 Mus.chord(:c, :maj, [1, 3, 5])
+```
 
+```elixir
+Mus.scale(:cs, :dim)
+```
 
+```elixir
+Mus.chord(:b, :maj, [1, 3, 5])
 ```
 
 ```elixir
 cmaj = Mus.scale(:c, :maj)
+crd_c = Mus.chord( cmaj, [1, 3, 5, 7])
+Mus.matches?( cmaj, crd_c)
+Mus.matches?( cmaj, [:b, :cs])
+
+```
+
+```elixir
+defmodule The do
+  def chords_in_scale(scale) do
+    for n <- Mus.notes(), t <- Mus.known_scales() do
+      chord = Mus.scale(n, t) |> Mus.chord35()
+
+      if Mus.matches?(scale, chord) do
+        {n, t}
+      end
+    end
+    |> Enum.filter(fn v -> v != nil end)
+  end
+
+  def scale_with_chord(chord) do
+    for n <- Mus.notes(), t <- Mus.known_scales() do
+      scale = Mus.scale(n, t)
+
+      if Mus.matches?(scale, chord) do
+        {n, t}
+      end
+    end
+    |> Enum.filter(fn v -> v != nil end)
+  end
 
 
+  @doc """
+  Per modulare da A a B
+  
+  """
+  def from_to( sn, st, dn, dt) do
+
+    src_scale = Mus.scale(sn, st)
+
+    c0 = chords_in_scale( src_scale )
+    if ({dn, dt} in c0) do
+      :present
+    
+    else
+      for {pn, pt} <- c0 do
+        pc = Mus.chord35(pn, pt)
+        scales = scale_with_chord(pc)
+        if ({dn, dt} in scales) do
+          :x
+        else
+          {:no, pn, pt}
+        end
+      end
+
+
+      
+    end
+    
+
+    
+  end
+  
+end
+
+The.chords_in_scale(Mus.scale(:c, :maj))
+# The.scale_with_chord( Mus.scale(:c, :min))
+```
+
+```elixir
+The.scale_with_chord( Mus.chord35( :c, :maj))
+```
+
+```elixir
+The.from_to(:c, :maj, :e, :maj)
+```
+
+## Giro di do
+
+Vedi https://www.chitarrafingerstyle.it/il-giro-armonico.html
+
+## Esempio
+
+Passo da DO maggiore a Sol maggiore: vedi https://www.suonolachitarra.it/come-fare-modulazione.html
+
+Mi serve un accordo in comune
+
+```
+DO mag                      Sol mag
+C  Am  Em  G7  C   --  --   G  Em  Am  D7  G   
+```
+
+Lui fa ad esempio
+
+```
+DO mag             ......  Sol mag
+C  Am  Em  G7  C   Dm  D   G  Em  Am  D7  G   
+```
+
+```elixir
+The.chords_in_scale(Mus.scale(:c, :maj))
+
+```
+
+```elixir
+The.chords_in_scale(Mus.scale(:g, :maj))
+```
+
+## Halle
+
+Cohen
+
+In C
+
+Intro
+
+```
+C    G    x n volte
+```
+
+Verse
+
+```
+C    Am    C     Am
+F    G.    C.    G   
+C.   F  G  Am    F
+G    E.    Am    Am
+```
+
+Choir
+
+```
+F    F.    Am.   Am
+F.   F     C.    G      C    G
+```
+
+```elixir
+The.chords_in_scale(Mus.scale(:c, :maj))
+```
+
+```elixir
+Mus.chord35(:c, :maj)
+```
+
+```elixir
+Mus.chord35(:g, :maj)
+```
+
+```elixir
+Mus.chord35(:e, :maj)
 ```
