@@ -283,6 +283,8 @@ Ciascuna URL può essere presente più volte.
 
 Idealmente dovrei effettuare un'unicizzazione per il digest, nel senso che se ho la stessa risorsa più volte è inutile mostrarla.
 
+Per la api CDX, vedi https://archive.org/developers/wayback-cdx-server.html
+
 **Quando faccio una modifica, faccio ""⌘ ⇧ ↵":  Evaluate current and all outdated cells**
 
 ```elixir
