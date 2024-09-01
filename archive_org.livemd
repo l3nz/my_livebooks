@@ -1,0 +1,329 @@
+# Query archive.org
+
+```elixir
+Mix.install([
+  {:req, "~> 0.5.0"},
+  {:kino, "~> 0.14.0"}
+])
+```
+
+## Codice di appoggio
+
+```elixir
+Req.get!("https://api.github.com/repos/wojtekmach/req").body["description"]
+```
+
+### Arch: lavora su una lista di items estratte dalle API
+
+```
+[
+  %{
+    digest: "V4XSYM24JSG2JGHCQNPXU2L3DQGIAHEX",
+    length: "20432",
+    mimetype: "image/gif",
+    original: "http://www.pangea.va.it:80/agora/agb.gif",
+    statuscode: "200",
+    timestamp: "19980627141111",
+    urlkey: "it,va,pangea)/agora/agb.gif"
+  }
+]
+```
+
+```elixir
+defmodule Arch do
+  def valid(items) do
+    items
+    |> Enum.filter(fn %{statuscode: status} -> status == "200" end)
+  end
+
+  def filter_by_type(items, mimetype) do
+    items
+    |> Enum.filter(fn %{mimetype: m} -> String.starts_with?(m, mimetype) end)
+  end
+
+  def filter_by_name(items, substring) do
+    items
+    |> Enum.filter(fn %{original: url} ->
+      String.contains?(String.downcase(url), String.downcase(substring))
+    end)
+  end
+
+  def excluding_name(items, substring) do
+    items
+    |> Enum.filter(fn %{original: url} ->
+      !String.contains?(String.downcase(url), String.downcase(substring))
+    end)
+  end
+
+
+  @doc """
+  Dato un set di items,
+  """
+  def latest_version_by_url(items) do
+    items
+    |> Enum.group_by(fn %{original: url} -> url end)
+    |> Enum.map(fn {_k, v} ->
+      v
+      |> Enum.sort_by(fn %{timestamp: t} -> t end, :desc)
+      |> List.first()
+    end)
+  end
+
+  @doc """
+  Di tutti gli elementi con lo stesso digest, tiene il più antico.
+  """
+  def unique_by_digest(items) do
+    items
+    |> Enum.group_by(fn %{digest: d} -> d end)
+    |> Enum.map(fn {_k, v} -> 
+      v
+      |> Enum.sort_by(fn %{timestamp: t} -> t end, :desc)
+      |> List.first(v) end)
+  end
+
+  def archive_url(%{timestamp: t, original: u}) do
+    "https://web.archive.org/web/#{URI.encode(t)}/#{URI.encode(u)}"
+  end
+
+  def with_archive_url(items) do
+    items
+    |> Enum.map( fn i -> Map.put( i, :archive_url, archive_url(i)) end)
+  end
+  
+
+  def statistics(items) do
+    items
+    |> Enum.group_by(fn %{mimetype: url} -> url end)
+    |> Enum.map(fn {k, v} ->
+      unq = v |> Enum.map(fn %{original: url} -> url end) |> Enum.uniq()
+      %{mimetype: k, unique_urls: length(unq), all_items: length(v)}
+    end)
+  end
+
+
+  @doc """
+  Stampa le statistiche (divise per mime type)
+  """
+  def statistics_kino(items) do
+    items
+    |> statistics()
+    |> Kino.DataTable.new(
+      keys: [:mimetype, :unique_urls, :all_items],
+      name: "Statistics for #{length(items)} items"
+    )
+  end
+
+
+  @doc """
+  Stampa una serie di URL come tabella Kino
+  """
+  def urls_kino(items) do
+    items
+    |> with_archive_url()
+    |> Kino.DataTable.new(
+      keys: [:original, :timestamp, :archive_url],
+      name: "Found #{length(items)} items"
+    )
+  end
+  
+end
+```
+
+```elixir
+defmodule HTML do
+  use Kino.JS
+
+  def new(html) do
+    Kino.JS.new(__MODULE__, html)
+  end
+
+  def img_table(l) when is_list(l) do
+    # divide in 4 colonne
+    cols =
+      l
+      |> Enum.with_index()
+      |> Enum.group_by(fn {_e, i} -> rem(i, 4) end, fn {e, _i} -> e end)
+
+    rendered_cols =
+      for c <- [0, 1, 2, 3] do
+        images =
+          Map.get(cols, c, [])
+          |> Enum.map(&img_html/1)
+
+        """
+        <div class="column">
+          #{Enum.join(images)}
+        </div>
+        """
+      end
+
+    """
+    <div class="row">
+      #{Enum.join(rendered_cols)}
+    </div>
+    """
+    |> new()
+  end
+
+  def img_html(%{timestamp: t, original: u} = item) do
+    img_html(Arch.archive_url(item), u, t)
+  end
+
+  def img_html(url, name, comment) do
+    """
+    <a href="#{url}" target="_new">
+    <img src=\"#{url}\" title="#{name} #{comment}">
+    </a>
+    """
+  end
+
+  asset "main.js" do
+    """
+    export function init(ctx, html) {
+      ctx.importCSS("./main.css");
+      ctx.root.innerHTML = html;
+    }
+    """
+  end
+
+  asset "main.css" do
+    """
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 0 4px;
+    }
+
+    /* Create four equal columns that sits next to each other */
+    .column {
+      flex: 22%;
+      max-width: 22%;
+      padding: 0 4px;
+    }
+
+    .column img {
+      margin-top: 8px;
+      vertical-align: middle;
+      width: 100%;
+      max-height: 300px;
+      
+    }
+
+    """
+  end
+end
+```
+
+```elixir
+defmodule R do
+  def json(url) do
+    Req.get!(url: url, decode_json: [keys: :atoms], receive_timeout: 30_000).body
+  end
+
+  def decode_table(rows) do
+    [title | data] = rows
+
+    title_atoms =
+      title
+      |> Enum.map(fn t -> String.to_atom(t) end)
+
+    for r <- data do
+      Enum.zip(title_atoms, r)
+      |> Map.new()
+    end
+  end
+
+  def table(url) do
+    json(url)
+    |> decode_table()
+  end
+
+  def lines(url) do
+    Req.get!(url: url).body
+    |> String.split(["\n", "\r", "\r\n"])
+  end
+end
+```
+
+### API di archive
+
+* Ottiene ultimo snapshot
+* Lista di snapshots
+* ...
+
+Il trick è quello di passare il nome del sito con l'asterisco in fondo, es "pangea.va.it*"
+
+```elixir
+site = "http://www.pangea.va.it"
+Req.get!(url: "https://archive.org/wayback/available?url=#{site}", 
+  decode_json: [keys: :atoms]).body
+```
+
+```elixir
+R.lines( "http://web.archive.org/cdx/search/cdx?url=#{site}")
+```
+
+## Browse di un sito
+
+### Scarico tutte le URL da un sito
+
+Ciascuna URL può essere presente più volte.
+
+```
+    %{
+      digest: "V4XSYM24JSG2JGHCQNPXU2L3DQGIAHEX",
+      length: "20432",
+      mimetype: "image/gif",
+      original: "http://www.pangea.va.it:80/agora/agb.gif",
+      statuscode: "200",
+      timestamp: "19980627141111",
+      urlkey: "it,va,pangea)/agora/agb.gif"
+    }
+```
+
+Idealmente dovrei effettuare un'unicizzazione per il digest, nel senso che se ho la stessa risorsa più volte è inutile mostrarla.
+
+**Quando faccio una modifica, faccio ""⌘ ⇧ ↵":  Evaluate current and all outdated cells**
+
+```elixir
+site = "pangea.va.it"
+
+v = R.table("http://web.archive.org/cdx/search/cdx?output=json&url=#{site}*")
+Arch.statistics_kino(v)
+
+```
+
+```elixir
+v
+|> Arch.filter_by_type("image")
+|> Arch.valid()
+|> Arch.latest_version_by_url()
+|> Arch.unique_by_digest()
+|> HTML.img_table()
+```
+
+#### ZIP files
+
+```elixir
+zip =
+  v
+  |> Arch.filter_by_name("exe")
+  |> Arch.valid()
+  |> Arch.latest_version_by_url()
+  |> Arch.unique_by_digest()
+  |> Arch.urls_kino()
+```
+
+```elixir
+v
+|> Arch.filter_by_name("/lenz")
+|> Arch.excluding_name("index.php")
+|> Arch.valid()
+|> Arch.latest_version_by_url()
+|> Arch.unique_by_digest()
+|> Arch.urls_kino()
+```
+
+```elixir
+
+```
