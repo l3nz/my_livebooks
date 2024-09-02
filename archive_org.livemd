@@ -55,6 +55,13 @@ defmodule Arch do
     end)
   end
 
+  def min_length(items, length_in_kb) do
+    items
+    |> Enum.filter(fn %{length: len} ->
+      {val, ""} = Integer.parse(len)
+      val > length_in_kb * 1024
+    end)
+  end
 
   @doc """
   Dato un set di items,
@@ -75,10 +82,11 @@ defmodule Arch do
   def unique_by_digest(items) do
     items
     |> Enum.group_by(fn %{digest: d} -> d end)
-    |> Enum.map(fn {_k, v} -> 
+    |> Enum.map(fn {_k, v} ->
       v
       |> Enum.sort_by(fn %{timestamp: t} -> t end, :desc)
-      |> List.first(v) end)
+      |> List.first(v)
+    end)
   end
 
   def archive_url(%{timestamp: t, original: u}) do
@@ -87,9 +95,8 @@ defmodule Arch do
 
   def with_archive_url(items) do
     items
-    |> Enum.map( fn i -> Map.put( i, :archive_url, archive_url(i)) end)
+    |> Enum.map(fn i -> Map.put(i, :archive_url, archive_url(i)) end)
   end
-  
 
   def statistics(items) do
     items
@@ -99,7 +106,6 @@ defmodule Arch do
       %{mimetype: k, unique_urls: length(unq), all_items: length(v)}
     end)
   end
-
 
   @doc """
   Stampa le statistiche (divise per mime type)
@@ -113,7 +119,6 @@ defmodule Arch do
     )
   end
 
-
   @doc """
   Stampa una serie di URL come tabella Kino
   """
@@ -125,7 +130,6 @@ defmodule Arch do
       name: "Found #{length(items)} items"
     )
   end
-  
 end
 ```
 
@@ -298,6 +302,7 @@ Arch.statistics_kino(v)
 ```elixir
 v
 |> Arch.filter_by_type("image")
+|> Arch.min_length(15)
 |> Arch.valid()
 |> Arch.latest_version_by_url()
 |> Arch.unique_by_digest()
@@ -309,7 +314,7 @@ v
 ```elixir
 zip =
   v
-  |> Arch.filter_by_name("exe")
+  |> Arch.filter_by_name("zip")
   |> Arch.valid()
   |> Arch.latest_version_by_url()
   |> Arch.unique_by_digest()
