@@ -178,7 +178,6 @@ defmodule QM do
       p
       |> String.replace(@qmpages_at, "")
       |> String.replace(@qmjs_at, "")
-      |> String.replace(".jsp", "")
     end
   end
 
@@ -307,13 +306,49 @@ P.with_class(all_verbs, ["directinner"])
 P.with_destinations(all_verbs, ["afp"])
 ```
 
+### Bug 6871 - Remove "afp_" popups
+
 ```elixir
-P.with_verb(all_verbs, ["qm_start"])
+P.with_destinations(all_verbs, [
+  "custom_report",
+  "afp_skeleton.jsp",
+  "custom_report.jsp",
+  "qm_recordtag_list.jsp"
+])
 ```
 
-## Logic
+```elixir
+P.with_destinations(all_verbs, [
+  "popup_audiomon.jsp",
+  "popup_call_close.jsp",
+  "popup_call.jsp",
+  
+])
+```
 
-prova
+```elixir
+P.with_destinations(all_verbs, [
+  "qm_taskslist.jsp",
+  "qm_tasksearch.jsp",
+  "qm_taskdetail",
+  "qm_taskreport_detail"
+])
+```
+
+```elixir
+P.with_verb(all_verbs, ["qm_task_"])
+```
+
+```elixir
+P.with_destinations(all_verbs, [
+  "popup_qa_grade_ajx.jsp",
+  "popup_qa_addComment_ajx_ds"
+])
+```
+
+## Esempi
+
+Alcuni esempi
 
 ```mermaid
 flowchart TD
@@ -336,12 +371,6 @@ qm_start -- default --> qm_start2
 
 
 
-```
-
-```mermaid
-pie title NETFLIX
-         "Time spent looking for movie" : 90
-         "Time spent watching it" : 10
 ```
 
 ```elixir
