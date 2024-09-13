@@ -11,10 +11,11 @@ Mix.install([
 
 ```elixir
 defmodule QM do
-  @qm  "/Users/lenz/dev/QueueMetrics"
-  @qmpages_at  "#{@qm}/src/main/webapp/"
+  @qm "/Users/lenz/dev/QueueMetrics"
+  @qmpages_at "#{@qm}/src/main/webapp/"
   @qmclasses_at "#{@qm}/src/main/java/"
-  
+  @qmjs_at "#{@qm}/nodejs/modules/"
+
   def all_verbs(qmverbs_at) do
     qmverbs_at
     |> Path.join("**/*.xml")
@@ -45,8 +46,7 @@ defmodule QM do
   defp classes(l_classes) when is_list(l_classes) do
     l_classes
     |> Enum.map(fn c ->
-      
-      %{name: java_class(c), extra: ""}
+      %{name: shorten_java_class(c), extra: ""}
     end)
   end
 
@@ -64,6 +64,9 @@ defmodule QM do
       vv =
         v
         |> String.replace("$WEBAPP/", "")
+        |> String.replace("?", "-")
+        |> String.replace("=", "-")
+      
 
       vvv =
         case String.ends_with?(vv, ".do") do
@@ -71,14 +74,19 @@ defmodule QM do
           _ -> vv
         end
 
-      
-
-      
       %{page: vvv, extra: "", link: kk}
     end)
     |> Enum.filter(fn %{page: p} -> p not in ["na", "n/a", "qm/svc_json_reply.jsp"] end)
   end
 
+  @doc """
+  Aggiunge le info che NON sono nel verbo.
+
+  - numero di altri verbi che condividono la stessa destinazone
+  - numero di altri verbi che condividono le calssi
+  - link al verbo da JSP JSm e Java
+
+  """
   def enhance(
         %{verb: verb, classes: local_classes, destinations: local_destinations} = a_verb,
         verb_db
@@ -133,18 +141,16 @@ defmodule QM do
     }
   end
 
-  def find_sources(verb), do:    find_source_pages(verb) ++ find_source_classes(verb)
-  
+  def find_sources(verb),
+    do: find_source_pages(verb) ++ find_source_classes(verb) ++ find_source_js(verb)
 
-  def find_source_pages(verb), do: find_files_containing( @qmpages_at, "**/*.jsp",  verb, :page )
+  def find_source_pages(verb), do: find_files_containing(@qmpages_at, "**/*.jsp", verb, :page)
+  def find_source_js(verb), do: find_files_containing(@qmjs_at, "**/*.js", verb, :js)
 
-  
-  def find_source_classes(verb), do: find_files_containing( @qmclasses_at, "**/*.java",  verb, :class )
-
-    
+  def find_source_classes(verb),
+    do: find_files_containing(@qmclasses_at, "**/*.java", verb, :class)
 
   def find_files_containing(from, filetype, verb, type) do
-    
     from
     |> Path.join(filetype)
     |> Path.wildcard()
@@ -152,9 +158,8 @@ defmodule QM do
       File.read!(f)
       |> contains_verb?(verb)
     end)
-    
     |> Enum.map(fn p -> %{type: type, src: cleanup_filename(p)} end)
-  end  
+  end
 
   defp contains_verb?(page, verb) do
     page
@@ -164,32 +169,25 @@ defmodule QM do
 
   def cleanup_filename(p) do
     if String.contains?(p, ".java") do
-    p
-    |> String.replace(@qmclasses_at, "")
-    |> String.replace("/", ".")  
-    |> String.replace(".java", "")
-    |> java_class()
-      
+      p
+      |> String.replace(@qmclasses_at, "")
+      |> String.replace("/", ".")
+      |> String.replace(".java", "")
+      |> shorten_java_class()
     else
-    p
-    |> String.replace(@qmpages_at, "")
-    |> String.replace(".jsp", "")
-    
-
-      
+      p
+      |> String.replace(@qmpages_at, "")
+      |> String.replace(@qmjs_at, "")
+      |> String.replace(".jsp", "")
     end
-
-    
-
-    
   end
 
-  defp java_class(c), do:  c
-        |> String.replace("it.loway.app.queuemetrics.", "")
-        |> String.replace("ch.loway.app.queuemetrics.", "")
+  defp shorten_java_class(c),
+    do:
+      c
+      |> String.replace("it.loway.app.queuemetrics.", "")
+      |> String.replace("ch.loway.app.queuemetrics.", "")
 
-
-  
   def mrm_verb(%{verb: v, classes: c, destinations: d, sources: s}) do
     """
 
@@ -202,7 +200,7 @@ defmodule QM do
     #{Enum.map(d, fn %{page: page, link: link} -> "#{v} -- #{link} --> #{page}\n" end)}
 
     #{Enum.map(s, fn %{type: _t, src: src} -> "#{src} --> #{v}\n" end)}
-    
+
     """
   end
 
@@ -227,18 +225,15 @@ defmodule QM do
     #{text}
 
     """)
-
-    
   end
 
   def as_mermaid_(t), do: IO.puts(t)
-  
 end
 
 all_verbs = QM.all_verbs("/Users/lenz/dev/QueueMetrics/src/main/webapp/WEB-INF/LVerbs")
 
 all_verbs
-|> Enum.take(10)
+|> Enum.take(2)
 |> Enum.map(fn v -> QM.enhance(v, all_verbs) end)
 |> Enum.map(fn v -> QM.mrm_verb(v) end)
 |> QM.as_mermaid()
@@ -306,53 +301,37 @@ end
 P.with_class(all_verbs, ["directinner"])
 ```
 
+### AFP_
+
+```elixir
+P.with_destinations(all_verbs, ["afp"])
+```
+
+```elixir
+P.with_verb(all_verbs, ["qm_start"])
+```
+
 ## Logic
 
 prova
 
 ```mermaid
-
 flowchart TD
 
-
-subgraph drep
-  it.loway.app.queuemetrics.autenticazione.directInnerLink([it.loway.app.queuemetrics.autenticazione.directInnerLink])
+subgraph qm_start
+  qm_start_autenticazione.start([autenticazione.start +11])
   
 end
 
-AUTH([AUTH])
-NOAUTH([NOAUTH])
-default([default])
+dbtest/expired_license.jsp([dbtest/expired_license.jsp ])
+licence_agreement.jsp([licence_agreement.jsp +1])
+qm_start2([qm_start2 +1])
 
 
-drep --> $WEBAPP/qm_drep_process.do
-drep --> $WEBAPP/qm_start.do
-drep --> na
-
-
-
-
-
-
-```
-
-```mermaid
-flowchart TD
-
-subgraph drep
-  it.loway.app.queuemetrics.autenticazione.directInnerLink([it.loway.app.queuemetrics.autenticazione.directInnerLink])
-  
-end
-
-AUTH([AUTH])
-NOAUTH([NOAUTH])
-default([default])
-
-
-drep --> $WEBAPP/qm_drep_process.do
-drep --> $WEBAPP/qm_start.do
-drep --> na
-
+qm_start -- DBTEST --> dbtest/index.jsp-exception-1
+qm_start -- EXPKEY --> dbtest/expired_license.jsp
+qm_start -- LICENZA --> licence_agreement.jsp
+qm_start -- default --> qm_start2
 
 
 
