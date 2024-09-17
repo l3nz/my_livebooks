@@ -9,6 +9,14 @@ Mix.install([
 
 ## Code
 
+**Nota che si possono salavare le immagini SVG**
+
+in firefox:
+
+* apro l'inspector e seleziono il contenuto SVG che si chiama "svg#graph1"
+* sul nodo SVG faccio "Edit as SVG"
+* Copio il risultato in un file.
+
 ```elixir
 defmodule QM do
   @qm "/Users/lenz/dev/QueueMetrics"
@@ -66,6 +74,7 @@ defmodule QM do
         |> String.replace("$WEBAPP/", "")
         |> String.replace("?", "-")
         |> String.replace("=", "-")
+        |> String.replace("./", "")
       
 
       vvv =
@@ -337,12 +346,12 @@ P.with_destinations(all_verbs, [
 
 ```elixir
 P.with_verb(all_verbs, ["qm_task_"])
+
 ```
 
 ```elixir
 P.with_destinations(all_verbs, [
-  "popup_qa_grade_ajx.jsp",
-  "popup_qa_addComment_ajx_ds"
+  "popup_qa_"
 ])
 ```
 
