@@ -257,14 +257,58 @@ end
 
 Il trick è quello di passare il nome del sito con l'asterisco in fondo, es "pangea.va.it*"
 
+Per la api CDX, vedi https://archive.org/developers/wayback-cdx-server.html
+
 ```elixir
-site = "http://www.pangea.va.it"
-Req.get!(url: "https://archive.org/wayback/available?url=#{site}", 
-  decode_json: [keys: :atoms]).body
+defmodule AApi do
+  def new_site_json(site), do: %{"output" => "json", "url" => "#{site}*"}
+
+  def new_site(site), do: %{"url" => "#{site}*"}
+
+  def before(api, year) do
+    Map.put(api, "to", "#{year}0101")
+  end
+
+  def since(api, year) do
+    Map.put(api, "to", "#{year}0101")
+  end
+
+  def year(api, year),
+    do:
+      api
+      |> before(year + 1)
+      |> since(year)
+
+  def limit(api, n), do: Map.put(api, "limit", "#{n}")
+
+  def jpeg(api), do: Map.put(api, "filter", "mimetype:image/jpeg")
+  def images(api), do: Map.put(api, "filter", "mimetype:image/*")
+  def videos(api), do: Map.put(api, "filter", "mimetype:video/*")
+
+  
+  def url(api) do
+    parms =
+      api
+      |> Enum.map(fn {k, v} -> "#{k}=#{URI.encode_www_form(v)}" end)
+      |> Enum.join("&")
+
+    "https://web.archive.org/cdx/search/cdx?#{parms}"
+  end
+end
 ```
 
 ```elixir
-R.lines( "http://web.archive.org/cdx/search/cdx?url=#{site}")
+#site = "http://www.pangea.va.it"
+#Req.get!(url: "https://archive.org/wayback/available?url=#{site}", 
+#  decode_json: [keys: :atoms]).body
+```
+
+```elixir
+AApi.new_site("pangea.va.it")
+|> AApi.limit(10)
+|> AApi.jpeg()
+|> AApi.url()
+|>R.lines( )
 ```
 
 ## Browse di un sito
@@ -287,14 +331,19 @@ Ciascuna URL può essere presente più volte.
 
 Idealmente dovrei effettuare un'unicizzazione per il digest, nel senso che se ho la stessa risorsa più volte è inutile mostrarla.
 
-Per la api CDX, vedi https://archive.org/developers/wayback-cdx-server.html
-
 **Quando faccio una modifica, faccio ""⌘ ⇧ ↵":  Evaluate current and all outdated cells**
 
 ```elixir
 site = "pangea.va.it"
 
-v = R.table("http://web.archive.org/cdx/search/cdx?output=json&url=#{site}*")
+v = AApi.new_site_json( site )
+#|> AApi.images()
+#|> AApi.videos()
+#|> AApi.year(2007)
+#|> AApi.limit(100)
+|> AApi.url()
+|> R.table()
+
 Arch.statistics_kino(v)
 
 ```
