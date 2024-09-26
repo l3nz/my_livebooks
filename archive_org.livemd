@@ -141,7 +141,20 @@ defmodule HTML do
     Kino.JS.new(__MODULE__, html)
   end
 
-  def img_table(l) when is_list(l) do
+  def img_table(all_l, opts \\ []) when is_list(all_l) do
+
+    page = case Keyword.get(opts, :page, 1) do
+      p when p >= 1 -> p - 1
+        _ -> 0  
+    end
+    
+    pagesize = Keyword.get(opts, :pagesize, 1000)
+    pages = ceil( length(all_l) / pagesize )
+    
+    l = all_l
+    |> Enum.drop( page * pagesize)
+    |> Enum.take(pagesize)
+    
     # divide in 4 colonne
     cols =
       l
@@ -162,6 +175,7 @@ defmodule HTML do
       end
 
     """
+    <h3>All items: #{length(all_l)} - Showing #{length(l)} - Page #{page + 1} of #{pages}</h3>
     <div class="row">
       #{Enum.join(rendered_cols)}
     </div>
@@ -336,16 +350,16 @@ Idealmente dovrei effettuare un'unicizzazione per il digest, nel senso che se ho
 ```elixir
 site = "pangea.va.it"
 
-v = AApi.new_site_json( site )
-#|> AApi.images()
-#|> AApi.videos()
-#|> AApi.year(2007)
-#|> AApi.limit(100)
-|> AApi.url()
-|> R.table()
+v =
+  AApi.new_site_json(site)
+  # |> AApi.images()
+  # |> AApi.videos()
+  # |> AApi.year(2007)
+  # |> AApi.limit(100)
+  |> AApi.url()
+  |> R.table()
 
 Arch.statistics_kino(v)
-
 ```
 
 ```elixir
@@ -355,7 +369,7 @@ v
 |> Arch.valid()
 |> Arch.latest_version_by_url()
 |> Arch.unique_by_digest()
-|> HTML.img_table()
+|> HTML.img_table(page: 1)
 ```
 
 #### ZIP files
