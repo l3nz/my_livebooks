@@ -1,0 +1,17 @@
+# Inspect MP4 with Membrane
+
+```elixir
+Mix.install([:membrane_mp4_plugin, :kino])
+
+```
+
+## Section
+
+Taken from a post on LInkedIn
+
+```elixir
+mp4 = File.read!("~/Desktop/vlc-output.mp4")
+{boxes, _remainder} = Membrane.MP4.Container.parse!(mp4)
+Kino.Tree.new(boxes)
+
+```
