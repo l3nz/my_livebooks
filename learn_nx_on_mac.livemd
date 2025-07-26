@@ -1,0 +1,201 @@
+# learn nx on mac
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.10"},
+  {:exla, "~> 0.10"},
+  {:benchee, "1.4.0"},
+
+  {:kino, "~> 0.16.0"},
+  {:stb_image, "~> 0.6.10"},
+  {:vega_lite, "~> 0.1.11"},
+  {:kino_vega_lite, "~> 0.1.13"},
+  {:explorer, "~> 0.10.0"},
+  {:axon, "~> 0.7.0"}
+],
+config: [
+    nx: [
+      default_defn_options: [compiler: EXLA],
+      some_other_key: "...",
+    ]
+  ]
+
+)
+
+Application.get_all_env :nx
+
+
+```
+
+## Section
+
+26 lug 2025
+
+```elixir
+Nx.tensor([1, 2, 3])
+```
+
+```elixir
+defmodule F do
+  import Nx.Defn
+  
+  defn(softmax(n), do: Nx.exp(n) / Nx.sum(Nx.exp(n)))
+end
+```
+
+```elixir
+key = Nx.Random.key(42)
+{tensor, _key} = Nx.Random.uniform(key, shape: {1_000_000})
+```
+
+```elixir
+Benchee.run(
+  %{
+    "JIT exla"  => fn ->
+      apply(EXLA.jit(&F.softmax/1), [tensor])
+    end,
+    "Ex exla" => fn ->
+      F.softmax(tensor)
+    end
+  },
+  time: 10,
+  #save: %{path: "./benchee/nx_no_exla.benchee", tag: "v1.0"}
+  load: "./benchee/nx_no_exla.benchee"
+)
+```
+
+Ho trovato che consigliavano di mettere: `default_defn_options: [compiler: EXLA]`
+
+### Risultati
+
+```
+Name                 ips        average  deviation         median         99th %
+Ex exla           1.36 K        0.74 ms    ±42.02%        0.59 ms        1.82 ms
+JIT exla          1.24 K        0.81 ms    ±40.07%        0.62 ms        1.87 ms
+JIT (v1.0)        0.80 K        1.24 ms    ±38.58%        1.01 ms        3.05 ms
+Ex (v1.0)      0.00301 K      332.25 ms     ±0.49%      331.85 ms      336.86 ms
+
+Comparison: 
+Ex exla           1.36 K
+JIT exla          1.24 K - 1.09x slower +0.0697 ms
+JIT (v1.0)        0.80 K - 1.68x slower +0.50 ms
+Ex (v1.0)      0.00301 K - 450.22x slower +331.52 ms
+```
+
+Praticamente le versione Ex che prima era 250x più lenta della JIT, è ora 10% più veloce!
+
+## Fiori
+
+Usa Axon. Ho dovuto fare alcune piccole modifiche rispetto al libro:
+
+* principalmente trasformare le serie come `:f32` perchè fallisce qlco se sono `:f64`. L'errore era cmq molto chiaro.
+* Inizializzare lo stato del modello con un oggetto
+
+```elixir
+require Explorer.DataFrame, as: DF
+```
+
+```elixir
+iris = Explorer.Datasets.iris()
+```
+
+```elixir
+# normalize
+feature_cols = ~w(sepal_length sepal_width petal_length petal_width)
+normalized_iris = DF.mutate(
+  iris,
+  for col <- across(^feature_cols) do
+    {col.name, (col-mean(col)) / standard_deviation(col) }
+  end
+)
+
+normalized_iris = DF.mutate( normalized_iris,
+[species: Explorer.Series.cast(species, :category)])
+
+# devo convertirli a :f32 se no fallisce il modello.
+normalized_iris = DF.mutate(
+  normalized_iris,
+  for col <- across(^feature_cols) do
+    {col.name, Explorer.Series.cast(col, :f32) }
+  end
+)
+
+```
+
+```elixir
+shuffled_norm_iris = DF.shuffle(normalized_iris)
+train_df = DF.slice(shuffled_norm_iris, 0..119)
+test_df = DF.slice(shuffled_norm_iris, 120..149)
+
+x_train = Nx.stack(train_df[feature_cols], axis: -1)
+y_train = train_df["species"]
+  # trasforma in 0, 1, 2
+|> Nx.stack(axis: -1)
+  # one-hot encoding
+|>Nx.equal(Nx.iota({1, 3}, axis: -1))
+
+
+x_test = Nx.stack(test_df[feature_cols], axis: -1)
+y_test = test_df["species"]
+|> Nx.stack(axis: -1)
+|>Nx.equal(Nx.iota({1, 3}, axis: -1))
+
+
+
+
+```
+
+```elixir
+model = Axon.input("iris_features", shape: {nil, 4})
+|> Axon.dense(3, activation: :softmax)
+Axon.Display.as_graph(model, Nx.template({1, 4}, :f32))
+```
+
+```elixir
+data_stream = Stream.repeatedly(fn ->
+  {x_train, y_train}
+end)
+
+
+trained_model_state = model
+|> Axon.Loop.trainer(:categorical_cross_entropy, :sgd)
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(data_stream, Axon.ModelState.empty(), iterations: 500, epochs: 20)
+
+# senza CUDA: 30 sec
+# con CUDA: 0.5 sec
+
+
+# più epochs ho, più impara : con 200 epochs ho una loss di 0.08
+```
+
+Più epochs ho, più impara esattamante i dati:
+
+```
+Epoch:  10, Batch: 450, accuracy: 0.9416718 loss: 0.2788212
+Epoch: 100, Batch: 450, accuracy: 0.9833357 loss: 0.1109093  **
+Epoch: 200, Batch: 450, accuracy: 0.9833357 loss: 0.0850167
+Epoch: 300, Batch: 450, accuracy: 0.9833357 loss: 0.0737911
+Epoch: 399, Batch: 450, accuracy: 0.9833357 loss: 0.0673194
+```
+
+Più è grosso il batch, pure:
+
+```
+Epoch:  10, Batch: 4950, accuracy: 0.9833598 loss: 0.1081216  **
+Epoch: 100, Batch: 4950, accuracy: 0.9833598 loss: 0.0526718
+Epoch: 199, Batch: 4950, accuracy: 0.9833598 loss: 0.0464315
+```
+
+Al batch 10 con 5000 ha valori tipo il batch 100 con 500.
+
+```elixir
+#Valutazione modello
+
+test_data= [{x_test, y_test}]
+
+model
+|> Axon.Loop.evaluator()
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run( test_data, trained_model_state)
+```
